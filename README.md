@@ -16,6 +16,10 @@ If you just want to run a single instance of Consul Agent to try out its functio
 
 	$ docker run -p 8400:8400 -p 8500:8500 -p 8600:53/udp -h node1 progrium/consul -server -bootstrap
 
+The [Web UI](http://www.consul.io/intro/getting-started/ui.html) can be enabled by adding the `-ui-dir` flag:
+
+	$ docker run -p 8400:8400 -p 8500:8500 -p 8600:53/udp -h node1 progrium/consul -server -bootstrap -ui-dir /ui
+
 We publish 8400 (RPC), 8500 (HTTP), and 8600 (DNS) so you can try all three interfaces. We also give it a hostname of `node1`. Setting the container hostname is the intended way to name the Consul Agent node. 
 
 Our recommended interface is HTTP using curl:
@@ -40,7 +44,7 @@ Here we start the first node not with `-bootstrap`, but with `-bootstrap-expect 
 
 We can get the container's internal IP by inspecting the container. We'll put it in the env var `JOIN_IP`.
 
-	$ JOIN_IP="$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' node1)"
+	$ JOIN_IP="$(docker inspect -f '{{.NetworkSettings.IPAddress}}' node1)"
 
 Then we'll start `node2` and tell it to join `node1` using `$JOIN_IP`:
 
@@ -54,7 +58,7 @@ We now have a real three node cluster running on a single host. Notice we've als
 
 We haven't published any ports to access the cluster, but we can use that as an excuse to run a fourth agent node in "client" mode (dropping the `-server`). This means it doesn't participate in the consensus quorum, but can still be used to interact with the cluster. It also means it doesn't need disk persistence.
 
-	$ docker run -d -p 8400:8400 -p 8500:8500 -p 8600:53/udp -h node4 progrium/consul -join $JOIN_IP
+	$ docker run -d -p 8400:8400 -p 8500:8500 -p 8600:53/udp --name node4 -h node4 progrium/consul -join $JOIN_IP
 
 Now we can interact with the cluster on those published ports and, if you want, play with killing, adding, and restarting nodes to see how the cluster handles it.
 
@@ -195,6 +199,14 @@ This container was designed assuming you'll be using it for DNS on your other co
 When running with `cmd:run`, it publishes the DNS port on the Docker bridge. You can use this with the `--dns` flag in `docker run`, or better yet, use it with the Docker daemon options. Here is a command you can run on Ubuntu systems that will tell Docker to use the bridge IP for DNS, otherwise use Google DNS, and use `service.consul` as the search domain. 
 
 	$ echo "DOCKER_OPTS='--dns 172.17.42.1 --dns 8.8.8.8 --dns-search service.consul'" >> /etc/default/docker
+
+If you're using [boot2docker](http://boot2docker.io/) on OS/X, rather than an Ubuntu host, it has a Tiny Core Linux VM running the docker containers. Use this command to set the extra Docker daemon options (as of boot2docker v1.3.1), which also uses the first DNS name server that your OS/X machine uses for name resolution outside of the boot2docker world.
+
+	$ boot2docker ssh sudo "ash -c \"echo EXTRA_ARGS=\'--dns 172.17.42.1 --dns $(scutil --dns | awk -F ': ' '/nameserver/{print $2}' | head -1) --dns-search service.consul\' > /var/lib/boot2docker/profile\""
+
+With those extra options in place, within a Docker container, you have the appropriate entries automatically set in the `/etc/resolv.conf` file. To test it out, start a Docker container that has the `dig` utility installed (this example uses [aanand/docker-dnsutils](https://registry.hub.docker.com/u/aanand/docker-dnsutils/) which is the Ubuntu image with dnsutils installed).
+
+	$ docker run --rm aanand/docker-dnsutils dig -t SRV consul +search
 
 #### Runtime Configuration
 
